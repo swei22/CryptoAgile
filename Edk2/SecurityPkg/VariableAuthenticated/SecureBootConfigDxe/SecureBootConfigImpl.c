@@ -2377,7 +2377,7 @@ EnrollImageSignatureToSigDB (
   }
 
   if (mSecDataDir->SizeOfCert == 0) {
-    if (!HashPeImage (HASHALG_SHA256)) {
+    if (!HashPeImage (HASHALG_SHA384)) {
       Status =  EFI_SECURITY_VIOLATION;
       goto ON_EXIT;
     }
