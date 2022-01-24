@@ -72,6 +72,10 @@
 
   ## SOMETIMES_CONSUMES      ## GUID            # Unique ID for the type of the signature.
   ## SOMETIMES_PRODUCES      ## GUID            # Unique ID for the type of the signature.
+  gEfiCertRsa3072Guid
+
+  ## SOMETIMES_CONSUMES      ## GUID            # Unique ID for the type of the signature.
+  ## SOMETIMES_PRODUCES      ## GUID            # Unique ID for the type of the signature.
   gEfiCertX509Guid
 
   ## SOMETIMES_CONSUMES      ## GUID            # Unique ID for the type of the signature.
@@ -81,6 +85,9 @@
   ## SOMETIMES_CONSUMES      ## GUID            # Unique ID for the type of the signature.
   ## SOMETIMES_PRODUCES      ## GUID            # Unique ID for the type of the signature.
   gEfiCertSha256Guid
+
+  ## SOMETIMES_PRODUCES      ## GUID            # Unique ID for the type of the signature.
+  gEfiCertSha384Guid
 
   ## SOMETIMES_CONSUMES      ## Variable:L"db"
   ## SOMETIMES_PRODUCES      ## Variable:L"db"
@@ -101,6 +108,7 @@
   gSecureBootConfigFormSetGuid
   gEfiCertPkcs7Guid                             ## SOMETIMES_PRODUCES  ## GUID  # Unique ID for the type of the certificate.
   gEfiCertTypeRsa2048Sha256Guid                 ## SOMETIMES_CONSUMES  ## GUID  # Unique ID for the type of the certificate.
+  gEfiCertTypeRsa3072Sha384Guid                 ## SOMETIMES_CONSUMES  ## GUID  # Unique ID for the type of the certificate.
   gEfiFileSystemVolumeLabelInfoIdGuid           ## SOMETIMES_CONSUMES  ## GUID  # Indicate the information type
 
   gEfiCertX509Sha256Guid                        ## SOMETIMES_PRODUCES  ## GUID  # Unique ID for the type of the certificate.

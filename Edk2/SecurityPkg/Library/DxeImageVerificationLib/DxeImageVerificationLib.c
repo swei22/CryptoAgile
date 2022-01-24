@@ -1832,10 +1832,10 @@ DxeImageVerificationHandler (
   //
   if ((SecDataDir == NULL) || (SecDataDir->Size == 0)) {
     //
-    // This image is not signed. The SHA256 hash value of the image must match a record in the security database "db",
+    // This image is not signed. The SHA384 hash value of the image must match a record in the security database "db",
     // and not be reflected in the security data base "dbx".
     //
-    if (!HashPeImage (HASHALG_SHA256)) {
+    if (!HashPeImage (HASHALG_SHA384)) {
       DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Failed to hash this image using %s.\n", mHashTypeStr));
       goto Failed;
     }

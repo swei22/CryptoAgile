@@ -145,6 +145,18 @@ typedef struct {
   }
 
 ///
+/// This identifies a signature containing an RSA-3072 key. The key (only the modulus
+/// since the public key exponent is known to be 0x10001) shall be stored in big-endian
+/// order.
+/// The SignatureHeader size shall always be 0. The SignatureSize shall always be 16 (size
+/// of SignatureOwner component) + 384 bytes.
+///
+#define EFI_CERT_RSA3072_GUID \
+  { \
+    0xD4E9A09B, 0xB8E1, 0xF891, {0xFA, 0x80, 0xEA, 0x19, 0x5A, 0x2C, 0xC4, 0xD8} \
+  }
+
+///
 /// This identifies a signature containing a RSA-2048 signature of a SHA-256 hash.  The
 /// SignatureHeader size shall always be 0. The SignatureSize shall always be 16 (size of
 /// SignatureOwner component) + 256 bytes.
@@ -152,6 +164,16 @@ typedef struct {
 #define EFI_CERT_RSA2048_SHA256_GUID \
   { \
     0xe2b36190, 0x879b, 0x4a3d, {0xad, 0x8d, 0xf2, 0xe7, 0xbb, 0xa3, 0x27, 0x84} \
+  }
+
+///
+/// This identifies a signature containing a RSA-3072 signature of a SHA-384 hash.  The
+/// SignatureHeader size shall always be 0. The SignatureSize shall always be 16 (size of
+/// SignatureOwner component) + 384 bytes.
+///
+#define EFI_CERT_RSA3072_SHA384_GUID \
+  { \
+    0xd5eca231, 0x2203, 0x40b3, {0xb5, 0xab, 0x32, 0xd8, 0xeb, 0x27, 0xbf, 0x44} \
   }
 
 ///
@@ -331,6 +353,8 @@ extern EFI_GUID  gEfiImageSecurityDatabaseGuid;
 extern EFI_GUID  gEfiCertSha256Guid;
 extern EFI_GUID  gEfiCertRsa2048Guid;
 extern EFI_GUID  gEfiCertRsa2048Sha256Guid;
+extern EFI_GUID  gEfiCertRsa3072Guid;
+extern EFI_GUID  gEfiCertRsa3072Sha384Guid;
 extern EFI_GUID  gEfiCertSha1Guid;
 extern EFI_GUID  gEfiCertRsa2048Sha1Guid;
 extern EFI_GUID  gEfiCertX509Guid;

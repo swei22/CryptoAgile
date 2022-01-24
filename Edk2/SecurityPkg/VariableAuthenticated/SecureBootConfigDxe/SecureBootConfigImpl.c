@@ -665,6 +665,176 @@ ON_EXIT:
 }
 
 /**
+  Enroll a new KEK item from public key storing file (*.pbk).
+
+  @param[in] PrivateData           The module's private data.
+
+  @retval   EFI_SUCCESS            New KEK enrolled successfully.
+  @retval   EFI_INVALID_PARAMETER  The parameter is invalid.
+  @retval   EFI_UNSUPPORTED        Unsupported command.
+  @retval   EFI_OUT_OF_RESOURCES   Could not allocate needed resources.
+
+**/
+EFI_STATUS
+EnrollRsa3072ToKek (
+  IN SECUREBOOT_CONFIG_PRIVATE_DATA  *Private
+  )
+{
+  EFI_STATUS          Status;
+  UINT32              Attr;
+  UINTN               DataSize;
+  EFI_SIGNATURE_LIST  *KekSigList;
+  UINTN               KeyBlobSize;
+  UINT8               *KeyBlob;
+  CPL_KEY_INFO        *KeyInfo;
+  EFI_SIGNATURE_DATA  *KEKSigData;
+  UINTN               KekSigListSize;
+  UINT8               *KeyBuffer;
+  UINTN               KeyLenInBytes;
+
+  Attr           = 0;
+  DataSize       = 0;
+  KeyBuffer      = NULL;
+  KeyBlobSize    = 0;
+  KeyBlob        = NULL;
+  KeyInfo        = NULL;
+  KEKSigData     = NULL;
+  KekSigList     = NULL;
+  KekSigListSize = 0;
+
+  //
+  // Form the KeKpub certificate list into EFI_SIGNATURE_LIST type.
+  // First, We have to parse out public key data from the pbk key file.
+  //
+  Status = ReadFileContent (
+             Private->FileContext->FHandle,
+             (VOID **)&KeyBlob,
+             &KeyBlobSize,
+             0
+             );
+  if (EFI_ERROR (Status)) {
+    goto ON_EXIT;
+  }
+
+  ASSERT (KeyBlob != NULL);
+  KeyInfo = (CPL_KEY_INFO *)KeyBlob;
+  if (KeyInfo->KeyLengthInBits / 8 != CERT_UEFI_RSA3072_SIZE) {
+    DEBUG ((DEBUG_ERROR, "Unsupported key length, Only RSA2048 is supported.\n"));
+    Status = EFI_UNSUPPORTED;
+    goto ON_EXIT;
+  }
+
+  //
+  // Convert the Public key to fix octet string format represented in RSA PKCS#1.
+  //
+  KeyLenInBytes = KeyInfo->KeyLengthInBits / 8;
+  KeyBuffer     = AllocateZeroPool (KeyLenInBytes);
+  if (KeyBuffer == NULL) {
+    Status = EFI_OUT_OF_RESOURCES;
+    goto ON_EXIT;
+  }
+
+  Int2OctStr (
+    (UINTN *)(KeyBlob + sizeof (CPL_KEY_INFO)),
+    KeyLenInBytes / sizeof (UINTN),
+    KeyBuffer,
+    KeyLenInBytes
+    );
+  CopyMem (KeyBlob + sizeof (CPL_KEY_INFO), KeyBuffer, KeyLenInBytes);
+
+  //
+  // Form an new EFI_SIGNATURE_LIST.
+  //
+  KekSigListSize = sizeof (EFI_SIGNATURE_LIST)
+                   + sizeof (EFI_SIGNATURE_DATA) - 1
+                   + CERT_UEFI_RSA3072_SIZE;
+
+  KekSigList = (EFI_SIGNATURE_LIST *)AllocateZeroPool (KekSigListSize);
+  if (KekSigList == NULL) {
+    Status = EFI_OUT_OF_RESOURCES;
+    goto ON_EXIT;
+  }
+
+  KekSigList->SignatureListSize = sizeof (EFI_SIGNATURE_LIST)
+                                  + sizeof (EFI_SIGNATURE_DATA) - 1
+                                  + CERT_UEFI_RSA3072_SIZE;
+  KekSigList->SignatureHeaderSize = 0;
+  KekSigList->SignatureSize       = sizeof (EFI_SIGNATURE_DATA) - 1 + CERT_UEFI_RSA3072_SIZE;
+  CopyGuid (&KekSigList->SignatureType, &gEfiCertRsa3072Guid);
+
+  KEKSigData = (EFI_SIGNATURE_DATA *)((UINT8 *)KekSigList + sizeof (EFI_SIGNATURE_LIST));
+  CopyGuid (&KEKSigData->SignatureOwner, Private->SignatureGUID);
+  CopyMem (
+    KEKSigData->SignatureData,
+    KeyBlob + sizeof (CPL_KEY_INFO),
+    CERT_UEFI_RSA3072_SIZE
+    );
+
+  //
+  // Check if KEK entry has been already existed.
+  // If true, use EFI_VARIABLE_APPEND_WRITE attribute to append the
+  // new KEK to original variable.
+  //
+  Attr = EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_RUNTIME_ACCESS
+         | EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS;
+  Status = CreateTimeBasedPayload (&KekSigListSize, (UINT8 **)&KekSigList);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "Fail to create time-based data payload: %r", Status));
+    goto ON_EXIT;
+  }
+
+  Status = gRT->GetVariable (
+                  EFI_KEY_EXCHANGE_KEY_NAME,
+                  &gEfiGlobalVariableGuid,
+                  NULL,
+                  &DataSize,
+                  NULL
+                  );
+  if (Status == EFI_BUFFER_TOO_SMALL) {
+    Attr |= EFI_VARIABLE_APPEND_WRITE;
+  } else if (Status != EFI_NOT_FOUND) {
+    goto ON_EXIT;
+  }
+
+  //
+  // Done. Now we have formed the correct KEKpub database item, just set it into variable storage,
+  //
+  Status = gRT->SetVariable (
+                  EFI_KEY_EXCHANGE_KEY_NAME,
+                  &gEfiGlobalVariableGuid,
+                  Attr,
+                  KekSigListSize,
+                  KekSigList
+                  );
+  if (EFI_ERROR (Status)) {
+    goto ON_EXIT;
+  }
+
+ON_EXIT:
+
+  CloseEnrolledFile (Private->FileContext);
+
+  if (Private->SignatureGUID != NULL) {
+    FreePool (Private->SignatureGUID);
+    Private->SignatureGUID = NULL;
+  }
+
+  if (KeyBlob != NULL) {
+    FreePool (KeyBlob);
+  }
+
+  if (KeyBuffer != NULL) {
+    FreePool (KeyBuffer);
+  }
+
+  if (KekSigList != NULL) {
+    FreePool (KekSigList);
+  }
+
+  return Status;
+}
+
+/**
   Enroll a new KEK item from X509 certificate file.
 
   @param[in] PrivateData           The module's private data.
@@ -822,7 +992,7 @@ EnrollKeyExchangeKey (
   if (IsDerEncodeCertificate (FilePostFix)) {
     return EnrollX509ToKek (Private);
   } else if (CompareMem (FilePostFix, L".pbk", 4) == 0) {
-    return EnrollRsa2048ToKek (Private);
+    return EnrollRsa3072ToKek (Private);
   } else {
     //
     // File type is wrong, simply close it
@@ -1765,7 +1935,7 @@ HashPeImage (
   SectionHeader = NULL;
   Status        = FALSE;
 
-  if (HashAlg != HASHALG_SHA256) {
+  if (HashAlg != HASHALG_SHA384) {
     return FALSE;
   }
 
@@ -1774,8 +1944,8 @@ HashPeImage (
   //
   ZeroMem (mImageDigest, MAX_DIGEST_SIZE);
 
-  mImageDigestSize = SHA256_DIGEST_SIZE;
-  mCertType        = gEfiCertSha256Guid;
+  mImageDigestSize = SHA384_DIGEST_SIZE;
+  mCertType        = gEfiCertSha384Guid;
 
   CtxSize = mHash[HashAlg].GetContextSize ();
 
@@ -2206,7 +2376,7 @@ EnrollImageSignatureToSigDB (
   }
 
   if (mSecDataDir->SizeOfCert == 0) {
-    if (!HashPeImage (HASHALG_SHA256)) {
+    if (!HashPeImage (HASHALG_SHA384)) {
       Status =  EFI_SECURITY_VIOLATION;
       goto ON_EXIT;
     }
@@ -2218,12 +2388,13 @@ EnrollImageSignatureToSigDB (
 
     if (mCertificate->wCertificateType == WIN_CERT_TYPE_EFI_GUID) {
       GuidCertData = (WIN_CERTIFICATE_UEFI_GUID *)mCertificate;
-      if (CompareMem (&GuidCertData->CertType, &gEfiCertTypeRsa2048Sha256Guid, sizeof (EFI_GUID)) != 0) {
+      // swei : Need to Check
+      if (CompareMem (&GuidCertData->CertType, &gEfiCertTypeRsa3072Sha384Guid, sizeof (EFI_GUID)) != 0) {
         Status = EFI_ABORTED;
         goto ON_EXIT;
       }
 
-      if (!HashPeImage (HASHALG_SHA256)) {
+      if (!HashPeImage (HASHALG_SHA384)) {
         Status = EFI_ABORTED;
         goto ON_EXIT;
       }
@@ -2506,6 +2677,10 @@ UpdateDeletePage (
       Help = STRING_TOKEN (STR_CERT_TYPE_SHA1_GUID);
     } else if (CompareGuid (&CertList->SignatureType, &gEfiCertSha256Guid)) {
       Help = STRING_TOKEN (STR_CERT_TYPE_SHA256_GUID);
+    } else if (CompareGuid (&CertList->SignatureType, &gEfiCertSha384Guid)) {
+      Help = STRING_TOKEN (STR_CERT_TYPE_SHA384_GUID);
+    } else if (CompareGuid (&CertList->SignatureType, &gEfiCertRsa3072Guid)) {
+      Help = STRING_TOKEN (STR_CERT_TYPE_RSA3072_SHA384_GUID);
     } else if (CompareGuid (&CertList->SignatureType, &gEfiCertX509Sha256Guid)) {
       Help = STRING_TOKEN (STR_CERT_TYPE_X509_SHA256_GUID);
     } else if (CompareGuid (&CertList->SignatureType, &gEfiCertX509Sha384Guid)) {
@@ -2659,7 +2834,8 @@ DeleteKeyExchangeKey (
   Offset         = 0;
   GuidIndex      = 0;
   while ((KekDataSize > 0) && (KekDataSize >= CertList->SignatureListSize)) {
-    if (CompareGuid (&CertList->SignatureType, &gEfiCertRsa2048Guid) ||
+    // swei : need to check
+    if (CompareGuid (&CertList->SignatureType, &gEfiCertRsa3072Guid) ||
         CompareGuid (&CertList->SignatureType, &gEfiCertX509Guid))
     {
       CopyMem (Data + Offset, CertList, (sizeof (EFI_SIGNATURE_LIST) + CertList->SignatureHeaderSize));
@@ -2855,9 +3031,11 @@ DeleteSignature (
   GuidIndex    = 0;
   while ((ItemDataSize > 0) && (ItemDataSize >= CertList->SignatureListSize)) {
     if (CompareGuid (&CertList->SignatureType, &gEfiCertRsa2048Guid) ||
+        CompareGuid (&CertList->SignatureType, &gEfiCertRsa3072Guid) ||
         CompareGuid (&CertList->SignatureType, &gEfiCertX509Guid) ||
         CompareGuid (&CertList->SignatureType, &gEfiCertSha1Guid) ||
         CompareGuid (&CertList->SignatureType, &gEfiCertSha256Guid) ||
+        CompareGuid (&CertList->SignatureType, &gEfiCertSha384Guid) ||
         CompareGuid (&CertList->SignatureType, &gEfiCertX509Sha256Guid) ||
         CompareGuid (&CertList->SignatureType, &gEfiCertX509Sha384Guid) ||
         CompareGuid (&CertList->SignatureType, &gEfiCertX509Sha512Guid)
@@ -3648,12 +3826,16 @@ LoadSignatureList (
   while ((RemainingSize > 0) && (RemainingSize >= ListWalker->SignatureListSize)) {
     if (CompareGuid (&ListWalker->SignatureType, &gEfiCertRsa2048Guid)) {
       ListType = STRING_TOKEN (STR_LIST_TYPE_RSA2048_SHA256);
+    } else if (CompareGuid (&ListWalker->SignatureType, &gEfiCertRsa3072Guid)) {
+      ListType = STRING_TOKEN (STR_LIST_TYPE_RSA3072_SHA384);
     } else if (CompareGuid (&ListWalker->SignatureType, &gEfiCertX509Guid)) {
       ListType = STRING_TOKEN (STR_LIST_TYPE_X509);
     } else if (CompareGuid (&ListWalker->SignatureType, &gEfiCertSha1Guid)) {
       ListType = STRING_TOKEN (STR_LIST_TYPE_SHA1);
     } else if (CompareGuid (&ListWalker->SignatureType, &gEfiCertSha256Guid)) {
       ListType = STRING_TOKEN (STR_LIST_TYPE_SHA256);
+    } else if (CompareGuid (&ListWalker->SignatureType, &gEfiCertSha384Guid)) {
+      ListType = STRING_TOKEN (STR_LIST_TYPE_SHA384);
     } else if (CompareGuid (&ListWalker->SignatureType, &gEfiCertX509Sha256Guid)) {
       ListType = STRING_TOKEN (STR_LIST_TYPE_X509_SHA256);
     } else if (CompareGuid (&ListWalker->SignatureType, &gEfiCertX509Sha384Guid)) {
@@ -3891,6 +4073,10 @@ FormatHelpInfo (
     ListTypeId = STRING_TOKEN (STR_LIST_TYPE_RSA2048_SHA256);
     DataSize   = ListEntry->SignatureSize - sizeof (EFI_GUID);
     IsCert     = TRUE;
+  } else if (CompareGuid (&ListEntry->SignatureType, &gEfiCertRsa3072Guid)) {
+    ListTypeId = STRING_TOKEN (STR_LIST_TYPE_RSA3072_SHA384);
+    DataSize   = ListEntry->SignatureSize - sizeof (EFI_GUID);
+    IsCert     = TRUE;
   } else if (CompareGuid (&ListEntry->SignatureType, &gEfiCertX509Guid)) {
     ListTypeId = STRING_TOKEN (STR_LIST_TYPE_X509);
     DataSize   = ListEntry->SignatureSize - sizeof (EFI_GUID);
@@ -3900,6 +4086,9 @@ FormatHelpInfo (
     DataSize   = 20;
   } else if (CompareGuid (&ListEntry->SignatureType, &gEfiCertSha256Guid)) {
     ListTypeId = STRING_TOKEN (STR_LIST_TYPE_SHA256);
+    DataSize   = 32;
+  } else if (CompareGuid (&ListEntry->SignatureType, &gEfiCertSha384Guid)) {
+    ListTypeId = STRING_TOKEN (STR_LIST_TYPE_SHA384);
     DataSize   = 32;
   } else if (CompareGuid (&ListEntry->SignatureType, &gEfiCertX509Sha256Guid)) {
     ListTypeId = STRING_TOKEN (STR_LIST_TYPE_X509_SHA256);
