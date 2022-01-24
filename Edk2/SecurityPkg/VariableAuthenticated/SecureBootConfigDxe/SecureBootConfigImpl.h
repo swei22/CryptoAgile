@@ -82,7 +82,6 @@ extern  EFI_IFR_GUID_LABEL  *mEndLabel;
 #define MAX_DIGEST_SIZE  SHA512_DIGEST_SIZE
 
 #define WIN_CERT_UEFI_RSA2048_SIZE  256
-#define CERT_UEFI_RSA3072_SIZE      384
 
 //
 // Support hash types
@@ -98,7 +97,6 @@ extern  EFI_IFR_GUID_LABEL  *mEndLabel;
 // Certificate public key minimum size (bytes)
 //
 #define CER_PUBKEY_MIN_SIZE  256
-//#define CER_PUBKEY_MIN_SIZE  384
 
 //
 // Types of errors may occur during certificate enrollment.

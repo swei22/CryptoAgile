@@ -35,7 +35,6 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 CONST UINT8  mRsaE[] = { 0x01, 0x00, 0x01 };
 
 CONST UINT8  mSha256OidValue[] = { 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01 };
-CONST UINT8  mSha384OidValue[] = { 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02 };
 
 //
 // Requirement for different signature type which have been defined in UEFI spec.
@@ -45,9 +44,7 @@ EFI_SIGNATURE_ITEM  mSupportSigItem[] = {
   // {SigType,                       SigHeaderSize,   SigDataSize  }
   { EFI_CERT_SHA256_GUID,         0, 32            },
   { EFI_CERT_RSA2048_GUID,        0, 256           },
-  { EFI_CERT_RSA3072_GUID,        0, 384           },
   { EFI_CERT_RSA2048_SHA256_GUID, 0, 256           },
-  { EFI_CERT_RSA3072_SHA384_GUID, 0, 384           },
   { EFI_CERT_SHA1_GUID,           0, 20            },
   { EFI_CERT_RSA2048_SHA1_GUID,   0, 256           },
   { EFI_CERT_X509_GUID,           0, ((UINT32) ~0) },
@@ -1124,7 +1121,7 @@ CalculatePrivAuthVarSignChainSHA256Digest (
   //
   Status = X509GetCommonName (SignerCert, SignerCertSize, CertCommonName, &CertCommonNameSize);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a Get SignerCert CommonName failed with status %x\n", __FUNCTION__, Status));
+    DEBUG ((DEBUG_INFO, "%a Get SignerCert CommonName failed with status %x\n", __FUNCTION__, Status));
     return EFI_ABORTED;
   }
 
@@ -1132,7 +1129,7 @@ CalculatePrivAuthVarSignChainSHA256Digest (
   // Get TopLevelCert tbsCertificate
   //
   if (!X509GetTBSCert (TopLevelCert, TopLevelCertSize, &TbsCert, &TbsCertSize)) {
-    DEBUG ((DEBUG_ERROR, "%a Get Top-level Cert tbsCertificate failed!\n", __FUNCTION__));
+    DEBUG ((DEBUG_INFO, "%a Get Top-level Cert tbsCertificate failed!\n", __FUNCTION__));
     return EFI_ABORTED;
   }
 
@@ -1163,90 +1160,6 @@ CalculatePrivAuthVarSignChainSHA256Digest (
   }
 
   CryptoStatus = Sha256Final (mHashCtx, Sha256Digest);
-  if (!CryptoStatus) {
-    return EFI_ABORTED;
-  }
-
-  return EFI_SUCCESS;
-}
-
-/**
-  Calculate SHA384 digest of SignerCert CommonName + ToplevelCert tbsCertificate
-  SignerCert and ToplevelCert are inside the signer certificate chain.
-
-  @param[in]  SignerCert          A pointer to SignerCert data.
-  @param[in]  SignerCertSize      Length of SignerCert data.
-  @param[in]  TopLevelCert        A pointer to TopLevelCert data.
-  @param[in]  TopLevelCertSize    Length of TopLevelCert data.
-  @param[out] Sha256Digest       Sha256 digest calculated.
-
-  @return EFI_ABORTED          Digest process failed.
-  @return EFI_SUCCESS          SHA384 Digest is successfully calculated.
-
-**/
-EFI_STATUS
-CalculatePrivAuthVarSignChainSHA384Digest (
-  IN     UINT8  *SignerCert,
-  IN     UINTN  SignerCertSize,
-  IN     UINT8  *TopLevelCert,
-  IN     UINTN  TopLevelCertSize,
-  OUT    UINT8  *Sha384Digest
-  )
-{
-  UINT8       *TbsCert;
-  UINTN       TbsCertSize;
-  CHAR8       CertCommonName[128];
-  UINTN       CertCommonNameSize;
-  BOOLEAN     CryptoStatus;
-  EFI_STATUS  Status;
-
-  CertCommonNameSize = sizeof (CertCommonName);
-  DEBUG ((DEBUG_ERROR, "SWEI %a\n", __FUNCTION__));
-
-  //
-  // Get SignerCert CommonName
-  //
-  Status = X509GetCommonName (SignerCert, SignerCertSize, CertCommonName, &CertCommonNameSize);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a Get SignerCert CommonName failed with status %x\n", __FUNCTION__, Status));
-    return EFI_ABORTED;
-  }
-
-  //
-  // Get TopLevelCert tbsCertificate
-  //
-  if (!X509GetTBSCert (TopLevelCert, TopLevelCertSize, &TbsCert, &TbsCertSize)) {
-    DEBUG ((DEBUG_ERROR, "%a Get Top-level Cert tbsCertificate failed!\n", __FUNCTION__));
-    return EFI_ABORTED;
-  }
-
-  //
-  // Digest SignerCert CN + TopLevelCert tbsCertificate
-  //
-  ZeroMem (Sha384Digest, SHA384_DIGEST_SIZE);
-  CryptoStatus = Sha384Init (mHashCtx);
-  if (!CryptoStatus) {
-    return EFI_ABORTED;
-  }
-
-  //
-  // '\0' is forced in CertCommonName. No overflow issue
-  //
-  CryptoStatus = Sha384Update (
-                   mHashCtx,
-                   CertCommonName,
-                   AsciiStrLen (CertCommonName)
-                   );
-  if (!CryptoStatus) {
-    return EFI_ABORTED;
-  }
-
-  CryptoStatus = Sha384Update (mHashCtx, TbsCert, TbsCertSize);
-  if (!CryptoStatus) {
-    return EFI_ABORTED;
-  }
-
-  CryptoStatus = Sha384Final (mHashCtx, Sha384Digest);
   if (!CryptoStatus) {
     return EFI_ABORTED;
   }
@@ -1598,7 +1511,7 @@ DeleteCertsFromDb (
 /**
   Insert signer's certificates for common authenticated variable with VariableName
   and VendorGuid in AUTH_CERT_DB_DATA to "certdb" or "certdbv" according to
-  time based authenticated variable attributes. CertData is the SHA256/384 digest of
+  time based authenticated variable attributes. CertData is the SHA256 digest of
   SignerCert CommonName + TopLevelCert tbsCertificate.
 
   @param[in]  VariableName      Name of authenticated Variable.
@@ -1638,8 +1551,7 @@ InsertCertsToDb (
   UINT32             CertDataSize;
   AUTH_CERT_DB_DATA  *Ptr;
   CHAR16             *DbName;
-  //UINT8              Sha256Digest[SHA256_DIGEST_SIZE];
-  UINT8              Sha384Digest[SHA384_DIGEST_SIZE];
+  UINT8              Sha256Digest[SHA256_DIGEST_SIZE];
 
   if ((VariableName == NULL) || (VendorGuid == NULL) || (SignerCert == NULL) || (TopLevelCert == NULL)) {
     return EFI_INVALID_PARAMETER;
@@ -1701,19 +1613,19 @@ InsertCertsToDb (
   // Construct new data content of variable "certdb" or "certdbv".
   //
   NameSize      = (UINT32)StrLen (VariableName);
-  CertDataSize  = sizeof (Sha384Digest);
+  CertDataSize  = sizeof (Sha256Digest);
   CertNodeSize  = sizeof (AUTH_CERT_DB_DATA) + (UINT32)CertDataSize + NameSize * sizeof (CHAR16);
   NewCertDbSize = (UINT32)DataSize + CertNodeSize;
   if (NewCertDbSize > mMaxCertDbSize) {
     return EFI_OUT_OF_RESOURCES;
   }
 
-  Status = CalculatePrivAuthVarSignChainSHA384Digest (
+  Status = CalculatePrivAuthVarSignChainSHA256Digest (
              SignerCert,
              SignerCertSize,
              TopLevelCert,
              TopLevelCertSize,
-             Sha384Digest
+             Sha256Digest
              );
   if (EFI_ERROR (Status)) {
     return Status;
@@ -1746,7 +1658,7 @@ InsertCertsToDb (
 
   CopyMem (
     (UINT8 *)Ptr +  sizeof (AUTH_CERT_DB_DATA) + NameSize * sizeof (CHAR16),
-    Sha384Digest,//Sha256Digest,
+    Sha256Digest,
     CertDataSize
     );
 
@@ -1860,7 +1772,7 @@ CleanCertsFromDb (
                    AuthVariableInfo.Attributes | EFI_VARIABLE_NON_VOLATILE
                    );
         CertCleaned = TRUE;
-        DEBUG ((DEBUG_ERROR, "Recovery!! Cert for Auth Variable %s Guid %g is removed for consistency\n", VariableName, &AuthVarGuid));
+        DEBUG ((DEBUG_INFO, "Recovery!! Cert for Auth Variable %s Guid %g is removed for consistency\n", VariableName, &AuthVarGuid));
         FreePool (VariableName);
         break;
       }
@@ -1941,7 +1853,6 @@ VerifyTimeBasedPayload (
   UINT8                          *CertsInCertDb;
   UINT32                         CertsSizeinDb;
   UINT8                          Sha256Digest[SHA256_DIGEST_SIZE];
-  UINT8                          Sha384Digest[SHA384_DIGEST_SIZE];
   EFI_CERT_DATA                  *CertDataPtr;
 
   //
@@ -2012,7 +1923,7 @@ VerifyTimeBasedPayload (
 
   //
   // SignedData.digestAlgorithms shall contain the digest algorithm used when preparing the
-  // signature. Only a digest algorithm of SHA-256/384 is accepted.
+  // signature. Only a digest algorithm of SHA-256 is accepted.
   //
   //    According to PKCS#7 Definition:
   //        SignedData ::= SEQUENCE {
@@ -2025,31 +1936,13 @@ VerifyTimeBasedPayload (
   //    This field has the fixed offset (+13) and be calculated based on two bytes of length encoding.
   //
   if ((Attributes & EFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS) != 0) {
-    if (SigDataSize >= (13 + sizeof (mSha384OidValue))) {
-      if ((*(SigData + 1) & TWO_BYTE_ENCODE) != TWO_BYTE_ENCODE) {
-        DEBUG ((DEBUG_ERROR, "SWEI VerifyTimeBasedPayload EFI_SECURITY_VIOLATION return\n"));
-        return EFI_SECURITY_VIOLATION;
-      }
-
-      if (CompareMem (SigData + 13, &mSha384OidValue, sizeof (mSha384OidValue)) != 0) {
-        if (CompareMem (SigData + 13, &mSha256OidValue, sizeof (mSha256OidValue)) != 0) {
-          DEBUG ((DEBUG_ERROR, "SWEI VerifyTimeBasedPayload OidValue return\n"));
-          return EFI_SECURITY_VIOLATION;
-        } else {
-          DEBUG ((DEBUG_ERROR, "SWEI VerifyTimeBasedPayload is mSha256OidValue\n"));
-        }
-      } else {
-        DEBUG ((DEBUG_ERROR, "SWEI VerifyTimeBasedPayload is mSha384OidValue\n"));
-      }
-    }
-/*
     if (SigDataSize >= (13 + sizeof (mSha256OidValue))) {
       if (((*(SigData + 1) & TWO_BYTE_ENCODE) != TWO_BYTE_ENCODE) ||
-          (CompareMem (SigData + 13, &mSha256OidValue, sizeof (mSha256OidValue)) != 0)) {
+          (CompareMem (SigData + 13, &mSha256OidValue, sizeof (mSha256OidValue)) != 0))
+      {
         return EFI_SECURITY_VIOLATION;
       }
     }
-*/
   }
 
   //
@@ -2238,22 +2131,7 @@ VerifyTimeBasedPayload (
         goto Exit;
       }
 
-      if (CertsSizeinDb == SHA384_DIGEST_SIZE) {
-        //
-        // Check hash of signer cert CommonName + Top-level issuer tbsCertificate against data in CertDb
-        //
-        CertDataPtr = (EFI_CERT_DATA *)(SignerCerts + 1);
-        Status      = CalculatePrivAuthVarSignChainSHA384Digest (
-                        CertDataPtr->CertDataBuffer,
-                        ReadUnaligned32 ((UINT32 *)&(CertDataPtr->CertDataLength)),
-                        TopLevelCert,
-                        TopLevelCertSize,
-                        Sha384Digest
-                        );
-        if (EFI_ERROR (Status) || (CompareMem (Sha384Digest, CertsInCertDb, CertsSizeinDb) != 0)) {
-          goto Exit;
-        }
-      } else if (CertsSizeinDb == SHA256_DIGEST_SIZE) {
+      if (CertsSizeinDb == SHA256_DIGEST_SIZE) {
         //
         // Check hash of signer cert CommonName + Top-level issuer tbsCertificate against data in CertDb
         //

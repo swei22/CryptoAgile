@@ -1342,7 +1342,7 @@ IsForbiddenByDbx (
                         mImageDigestSize
                         );
         if (IsForbidden) {
-          DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: Image is signed but signature is forbidden by DBX.\n"));
+          DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Image is signed but signature is forbidden by DBX.\n"));
           goto Done;
         }
 
@@ -1409,7 +1409,7 @@ IsForbiddenByDbx (
         continue;
       } else {
         IsForbidden = TRUE;
-        DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: Image is signed but signature failed the timestamp check.\n"));
+        DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Image is signed but signature failed the timestamp check.\n"));
         goto Done;
       }
     }
@@ -1567,7 +1567,7 @@ IsAllowedByDb (
               //
               VerifyStatus = PassTimestampCheck (AuthData, AuthDataSize, &RevocationTime);
               if (!VerifyStatus) {
-                DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: Image is signed and signature is accepted by DB, but its root cert failed the timestamp check.\n"));
+                DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Image is signed and signature is accepted by DB, but its root cert failed the timestamp check.\n"));
               }
             }
           }
@@ -1697,8 +1697,6 @@ DxeImageVerificationHandler (
   IsVerified        = FALSE;
   IsFound           = FALSE;
 
-  DEBUG ((DEBUG_ERROR, "SWEI: DxeImageVerificationHandler()\n"));
-
   //
   // Check the image type and get policy setting.
   //
@@ -1784,7 +1782,7 @@ DxeImageVerificationHandler (
     //
     // The information can't be got from the invalid PeImage
     //
-    DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: PeImage invalid. Cannot retrieve image information.\n"));
+    DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: PeImage invalid. Cannot retrieve image information.\n"));
     goto Failed;
   }
 
@@ -1807,7 +1805,7 @@ DxeImageVerificationHandler (
     //
     // It is not a valid Pe/Coff file.
     //
-    DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: Not a valid PE/COFF image.\n"));
+    DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Not a valid PE/COFF image.\n"));
     goto Failed;
   }
 
@@ -1834,11 +1832,11 @@ DxeImageVerificationHandler (
   //
   if ((SecDataDir == NULL) || (SecDataDir->Size == 0)) {
     //
-    // This image is not signed. The SHA384 hash value of the image must match a record in the security database "db",
+    // This image is not signed. The SHA256 hash value of the image must match a record in the security database "db",
     // and not be reflected in the security data base "dbx".
     //
-    if (!HashPeImage (HASHALG_SHA384)) {
-      DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: Failed to hash this image using %s.\n", mHashTypeStr));
+    if (!HashPeImage (HASHALG_SHA256)) {
+      DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Failed to hash this image using %s.\n", mHashTypeStr));
       goto Failed;
     }
 
@@ -1853,7 +1851,7 @@ DxeImageVerificationHandler (
       //
       // Image Hash is in forbidden database (DBX).
       //
-      DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: Image is not signed and %s hash of image is forbidden by DBX.\n", mHashTypeStr));
+      DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Image is not signed and %s hash of image is forbidden by DBX.\n", mHashTypeStr));
       goto Failed;
     }
 
@@ -1874,7 +1872,7 @@ DxeImageVerificationHandler (
     //
     // Image Hash is not found in both forbidden and allowed database.
     //
-    DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: Image is not signed and %s hash of image is not found in DB/DBX.\n", mHashTypeStr));
+    DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Image is not signed and %s hash of image is not found in DB/DBX.\n", mHashTypeStr));
     goto Failed;
   }
 
@@ -1974,7 +1972,7 @@ DxeImageVerificationHandler (
                  );
     if (EFI_ERROR (DbStatus) || IsFound) {
       Action = EFI_IMAGE_EXECUTION_AUTH_SIG_FOUND;
-      DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: Image is signed but %s hash of image is found in DBX.\n", mHashTypeStr));
+      DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Image is signed but %s hash of image is found in DBX.\n", mHashTypeStr));
       IsVerified = FALSE;
       break;
     }
@@ -1990,7 +1988,7 @@ DxeImageVerificationHandler (
       if (!EFI_ERROR (DbStatus) && IsFound) {
         IsVerified = TRUE;
       } else {
-        DEBUG ((DEBUG_ERROR, "DxeImageVerificationLib: Image is signed but signature is not allowed by DB and %s hash of image is not found in DB/DBX.\n", mHashTypeStr));
+        DEBUG ((DEBUG_INFO, "DxeImageVerificationLib: Image is signed but signature is not allowed by DB and %s hash of image is not found in DB/DBX.\n", mHashTypeStr));
       }
     }
   }
@@ -2033,7 +2031,7 @@ Failed:
   NameStr = ConvertDevicePathToText (File, FALSE, TRUE);
   AddImageExeInfo (Action, NameStr, File, SignatureList, SignatureListSize);
   if (NameStr != NULL) {
-    DEBUG ((DEBUG_ERROR, "The image doesn't pass verification: %s\n", NameStr));
+    DEBUG ((DEBUG_INFO, "The image doesn't pass verification: %s\n", NameStr));
     FreePool (NameStr);
   }
 

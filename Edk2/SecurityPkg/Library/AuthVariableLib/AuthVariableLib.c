@@ -26,7 +26,7 @@ UINT32  mMaxCertDbSize;
 UINT32  mPlatformMode;
 UINT8   mVendorKeyState;
 
-EFI_GUID  mSignatureSupport[] = { EFI_CERT_SHA1_GUID, EFI_CERT_SHA384_GUID, EFI_CERT_RSA3072_GUID, EFI_CERT_X509_GUID };
+EFI_GUID  mSignatureSupport[] = { EFI_CERT_SHA1_GUID, EFI_CERT_SHA256_GUID, EFI_CERT_RSA2048_GUID, EFI_CERT_X509_GUID };
 
 //
 // Hash context pointer
@@ -135,7 +135,7 @@ AuthVariableLibInitialize (
   //
   // Initialize hash context.
   //
-  CtxSize  = Sha384GetContextSize ();
+  CtxSize  = Sha256GetContextSize ();
   mHashCtx = AllocateRuntimePool (CtxSize);
   if (mHashCtx == NULL) {
     return EFI_OUT_OF_RESOURCES;
@@ -153,9 +153,9 @@ AuthVariableLibInitialize (
 
   Status = AuthServiceInternalFindVariable (EFI_PLATFORM_KEY_NAME, &gEfiGlobalVariableGuid, (VOID **)&Data, &DataSize);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "Variable %s does not exist.\n", EFI_PLATFORM_KEY_NAME));
+    DEBUG ((DEBUG_INFO, "Variable %s does not exist.\n", EFI_PLATFORM_KEY_NAME));
   } else {
-    DEBUG ((DEBUG_ERROR, "Variable %s exists.\n", EFI_PLATFORM_KEY_NAME));
+    DEBUG ((DEBUG_INFO, "Variable %s exists.\n", EFI_PLATFORM_KEY_NAME));
   }
 
   //
@@ -240,9 +240,9 @@ AuthVariableLibInitialize (
     return Status;
   }
 
-  DEBUG ((DEBUG_ERROR, "Variable %s is %x\n", EFI_SETUP_MODE_NAME, mPlatformMode));
-  DEBUG ((DEBUG_ERROR, "Variable %s is %x\n", EFI_SECURE_BOOT_MODE_NAME, SecureBootMode));
-  DEBUG ((DEBUG_ERROR, "Variable %s is %x\n", EFI_SECURE_BOOT_ENABLE_NAME, SecureBootEnable));
+  DEBUG ((DEBUG_INFO, "Variable %s is %x\n", EFI_SETUP_MODE_NAME, mPlatformMode));
+  DEBUG ((DEBUG_INFO, "Variable %s is %x\n", EFI_SECURE_BOOT_MODE_NAME, SecureBootMode));
+  DEBUG ((DEBUG_INFO, "Variable %s is %x\n", EFI_SECURE_BOOT_ENABLE_NAME, SecureBootEnable));
 
   //
   // Initialize "CustomMode" in STANDARD_SECURE_BOOT_MODE state.
@@ -259,7 +259,7 @@ AuthVariableLibInitialize (
     return Status;
   }
 
-  DEBUG ((DEBUG_ERROR, "Variable %s is %x\n", EFI_CUSTOM_MODE_NAME, CustomMode));
+  DEBUG ((DEBUG_INFO, "Variable %s is %x\n", EFI_CUSTOM_MODE_NAME, CustomMode));
 
   //
   // Check "certdb" variable's existence.
@@ -349,7 +349,7 @@ AuthVariableLibInitialize (
     return Status;
   }
 
-  DEBUG ((DEBUG_ERROR, "Variable %s is %x\n", EFI_VENDOR_KEYS_VARIABLE_NAME, mVendorKeyState));
+  DEBUG ((DEBUG_INFO, "Variable %s is %x\n", EFI_VENDOR_KEYS_VARIABLE_NAME, mVendorKeyState));
 
   AuthVarLibContextOut->StructVersion       = AUTH_VAR_LIB_CONTEXT_OUT_STRUCT_VERSION;
   AuthVarLibContextOut->StructSize          = sizeof (AUTH_VAR_LIB_CONTEXT_OUT);
