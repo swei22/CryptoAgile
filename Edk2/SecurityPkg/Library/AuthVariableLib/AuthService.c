@@ -1597,7 +1597,7 @@ DeleteCertsFromDb (
 /**
   Insert signer's certificates for common authenticated variable with VariableName
   and VendorGuid in AUTH_CERT_DB_DATA to "certdb" or "certdbv" according to
-  time based authenticated variable attributes. CertData is the SHA384 digest of
+  time based authenticated variable attributes. CertData is the SHA256/SHA384 digest of
   SignerCert CommonName + TopLevelCert tbsCertificate.
 
   @param[in]  VariableName      Name of authenticated Variable.
@@ -1607,6 +1607,7 @@ DeleteCertsFromDb (
   @param[in]  SignerCertSize    Length of signer certificate.
   @param[in]  TopLevelCert      Top-level certificate data.
   @param[in]  TopLevelCertSize  Length of top-level certificate.
+  @param[in]  DigestSize        Digest Size.
 
   @retval  EFI_INVALID_PARAMETER Any input parameter is invalid.
   @retval  EFI_ACCESS_DENIED     An AUTH_CERT_DB_DATA entry with same VariableName
@@ -1623,7 +1624,8 @@ InsertCertsToDb (
   IN     UINT8     *SignerCert,
   IN     UINTN     SignerCertSize,
   IN     UINT8     *TopLevelCert,
-  IN     UINTN     TopLevelCertSize
+  IN     UINTN     TopLevelCertSize,
+  IN     UINT32    DigestSize
   )
 {
   EFI_STATUS         Status;
@@ -1637,6 +1639,7 @@ InsertCertsToDb (
   UINT32             CertDataSize;
   AUTH_CERT_DB_DATA  *Ptr;
   CHAR16             *DbName;
+  UINT8              Sha256Digest[SHA256_DIGEST_SIZE];
   UINT8              Sha384Digest[SHA384_DIGEST_SIZE];
 
   if ((VariableName == NULL) || (VendorGuid == NULL) || (SignerCert == NULL) || (TopLevelCert == NULL)) {
@@ -1699,20 +1702,37 @@ InsertCertsToDb (
   // Construct new data content of variable "certdb" or "certdbv".
   //
   NameSize      = (UINT32)StrLen (VariableName);
-  CertDataSize  = sizeof (Sha384Digest);
+  CertDataSize  = DigestSize;
   CertNodeSize  = sizeof (AUTH_CERT_DB_DATA) + (UINT32)CertDataSize + NameSize * sizeof (CHAR16);
   NewCertDbSize = (UINT32)DataSize + CertNodeSize;
   if (NewCertDbSize > mMaxCertDbSize) {
     return EFI_OUT_OF_RESOURCES;
   }
 
-  Status = CalculatePrivAuthVarSignChainSHA384Digest (
-             SignerCert,
-             SignerCertSize,
-             TopLevelCert,
-             TopLevelCertSize,
-             Sha384Digest
-             );
+  switch (DigestSize) {
+  case SHA256_DIGEST_SIZE:
+    Status = CalculatePrivAuthVarSignChainSHA256Digest (
+               SignerCert,
+               SignerCertSize,
+               TopLevelCert,
+               TopLevelCertSize,
+               Sha256Digest
+               );
+    break;
+  case SHA384_DIGEST_SIZE:
+    Status = CalculatePrivAuthVarSignChainSHA384Digest (
+               SignerCert,
+               SignerCertSize,
+               TopLevelCert,
+               TopLevelCertSize,
+               Sha384Digest
+               );
+    break;
+  default:
+    Status = EFI_UNSUPPORTED;
+    break;
+  }
+
   if (EFI_ERROR (Status)) {
     return Status;
   }
@@ -1742,11 +1762,24 @@ InsertCertsToDb (
     NameSize * sizeof (CHAR16)
     );
 
-  CopyMem (
-    (UINT8 *)Ptr +  sizeof (AUTH_CERT_DB_DATA) + NameSize * sizeof (CHAR16),
-    Sha384Digest,
-    CertDataSize
-    );
+  switch (DigestSize) {
+  case SHA256_DIGEST_SIZE:
+    CopyMem (
+      (UINT8 *)Ptr +  sizeof (AUTH_CERT_DB_DATA) + NameSize * sizeof (CHAR16),
+      Sha256Digest,
+      CertDataSize
+      );
+    break;
+  case SHA384_DIGEST_SIZE:
+    CopyMem (
+      (UINT8 *)Ptr +  sizeof (AUTH_CERT_DB_DATA) + NameSize * sizeof (CHAR16),
+      Sha384Digest,
+      CertDataSize
+      );
+    break;
+  default:
+    return EFI_UNSUPPORTED;
+  }
 
   //
   // Set "certdb" or "certdbv".
@@ -2010,7 +2043,7 @@ VerifyTimeBasedPayload (
 
   //
   // SignedData.digestAlgorithms shall contain the digest algorithm used when preparing the
-  // signature. Only a digest algorithm of SHA-256 is accepted.
+  // signature. Only a digest algorithm of SHA-256 or SHA-384 is accepted.
   //
   //    According to PKCS#7 Definition:
   //        SignedData ::= SEQUENCE {
@@ -2023,17 +2056,18 @@ VerifyTimeBasedPayload (
   //    This field has the fixed offset (+13) and be calculated based on two bytes of length encoding.
   //
   if ((Attributes & EFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS) != 0) {
+    // sizeof (mSha384OidValue) is equl to sizeof (mSha256OidValue)
     if (SigDataSize >= (13 + sizeof (mSha384OidValue))) {
       if ((*(SigData + 1) & TWO_BYTE_ENCODE) != TWO_BYTE_ENCODE) {
         return EFI_SECURITY_VIOLATION;
       }
 
-      if (CompareMem (SigData + 13, &mSha384OidValue, sizeof (mSha384OidValue)) != 0) {
-        if (CompareMem (SigData + 13, &mSha256OidValue, sizeof (mSha256OidValue)) != 0) {
-          return EFI_SECURITY_VIOLATION;
-        } else {
-        }
+      if (CompareMem (SigData + 13, &mSha384OidValue, sizeof (mSha384OidValue)) == 0) {
+        // SHA-256 is accepted
+      } else if (CompareMem (SigData + 13, &mSha256OidValue, sizeof (mSha256OidValue)) == 0) {
+        // SHA-384 is accepted
       } else {
+        return EFI_SECURITY_VIOLATION;
       }
     }
   }
@@ -2290,7 +2324,8 @@ VerifyTimeBasedPayload (
                       CertDataPtr->CertDataBuffer,
                       ReadUnaligned32 ((UINT32 *)&(CertDataPtr->CertDataLength)),
                       TopLevelCert,
-                      TopLevelCertSize
+                      TopLevelCertSize,
+                      CertsSizeinDb
                       );
       if (EFI_ERROR (Status)) {
         VerifyStatus = FALSE;
